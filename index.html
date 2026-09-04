@@ -162,7 +162,7 @@
     try{
       const res = await fetch(`${API_BASE}/api/auth/login`, {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ email: $('l-email').value.trim(), password: $('l-password').value })
+        body: JSON.stringify({ email: $('l-email').value.trim(), password: $('l-password').value, app: 'ops' })
       });
       const data = await res.json();
       if(!res.ok){ msg.textContent = data.error || 'Sign in failed.'; msg.classList.add('err'); return; }
