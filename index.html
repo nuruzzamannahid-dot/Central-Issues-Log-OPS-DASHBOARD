@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ops Console — Carrybee Express</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #1C1B18;
+    --surface: #242220;
+    --surface-2: #2E2B26;
+    --border: #3D3A32;
+    --text: #F2EDE4;
+    --text-dim: #ABA495;
+    --text-faint: #766F60;
+    --accent: #E08A3E;
+    --accent-soft: #E08A3E22;
+    --red: #C4544A;
+    --red-soft: #C4544A22;
+    --green: #7A9B6E;
+    --green-soft: #7A9B6E22;
+    --gold: #D9B34E;
+    --gold-soft: #D9B34E22;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:900px;margin:0 auto;padding:28px 20px 80px;}
+  header.top{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;border-bottom:1px solid var(--border);padding-bottom:20px;margin-bottom:24px;}
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.04em;color:var(--accent);}
+  h1{font-family:'Fraunces',serif;font-weight:500;font-size:30px;margin:6px 0 0;letter-spacing:-.01em;}
+
+  .login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px;max-width:380px;margin:60px auto 0;}
+  .login-card p.lede{color:var(--text-dim);margin:0 0 22px;font-size:14px;line-height:1.5;}
+  .field{margin-bottom:16px;display:flex;flex-direction:column;gap:7px;}
+  label{font-size:12.5px;font-weight:600;color:var(--text-dim);}
+  input[type=text], textarea, select{
+    background:var(--surface-2);border:1px solid var(--border);color:var(--text);
+    padding:11px 12px;border-radius:8px;font-family:'Inter',sans-serif;font-size:14px;
+    outline:none;width:100%;
+  }
+  textarea{resize:vertical;min-height:70px;}
+  button.primary{
+    background:var(--accent);color:#1C1B18;border:none;font-family:'Inter',sans-serif;
+    font-weight:700;font-size:14px;padding:11px 22px;border-radius:8px;cursor:pointer;
+  }
+  button.primary:disabled{opacity:.5;cursor:default;}
+  button.ghost{
+    background:transparent;border:1px solid var(--border);color:var(--text-dim);
+    font-family:'Inter',sans-serif;font-weight:600;font-size:13px;padding:9px 16px;
+    border-radius:8px;cursor:pointer;
+  }
+  button.link{background:none;border:none;color:var(--accent);font-family:'Inter',sans-serif;font-weight:600;font-size:12.5px;cursor:pointer;padding:0;}
+  .status-msg{font-size:13.5px;font-weight:600;}
+  .status-msg.err{color:var(--red);}
+  .status-msg.ok{color:var(--green);}
+
+  #view-console{display:none;}
+  .session-row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px;font-size:12.5px;color:var(--text-faint);flex-wrap:wrap;}
+  .role-badges{display:flex;gap:6px;flex-wrap:wrap;}
+  .role-badge{background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;}
+
+  .issue-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px 22px;margin-bottom:16px;}
+  .issue-top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;}
+  .issue-id{font-family:'Fraunces',serif;font-size:19px;font-weight:500;}
+  .issue-meta{font-size:12px;color:var(--text-faint);font-family:'IBM Plex Mono',monospace;}
+  .tag-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
+  .tag{font-size:11.5px;color:var(--text-dim);background:var(--surface-2);border:1px solid var(--border);padding:3px 10px;border-radius:999px;}
+  .badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;}
+  .badge.open{background:var(--red-soft);color:var(--red);}
+  .badge.progress{background:var(--gold-soft);color:var(--gold);}
+  .badge.escalated{background:var(--accent-soft);color:var(--accent);}
+  .badge.resolved{background:var(--green-soft);color:var(--green);}
+  .details-text{color:var(--text-dim);font-size:13.5px;line-height:1.5;margin-bottom:14px;}
+  .prior-remark{font-size:12.5px;color:var(--text-faint);border-top:1px solid var(--border);padding-top:10px;margin-top:2px;margin-bottom:14px;}
+  .prior-remark b{color:var(--text-dim);}
+  .update-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;}
+  .update-row .field{flex:1;min-width:180px;margin-bottom:0;}
+  .update-row select{width:auto;min-width:150px;}
+  .empty-state{padding:50px 10px;text-align:center;color:var(--text-faint);font-size:13.5px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <span class="eyebrow">CARRYBEE EXPRESS</span>
+      <h1>Ops Console</h1>
+    </div>
+  </header>
+
+  <div id="view-login" class="login-card">
+    <p class="lede">Sign in with your Carrybee login to see issues under your hub(s).</p>
+    <form id="loginForm">
+      <div class="field">
+        <label>Email</label>
+        <input type="text" id="l-email" required placeholder="you@carrybee.com">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="text" id="l-password" required placeholder="Password">
+      </div>
+      <button type="submit" class="primary">Sign in</button>
+      <div style="margin-top:12px;"><span id="loginMsg" class="status-msg"></span></div>
+    </form>
+  </div>
+
+  <div id="view-console">
+    <div class="session-row">
+      <div class="role-badges" id="roleBadges"></div>
+      <div><span id="sessionLabel"></span> &nbsp;·&nbsp; <button class="link" id="btnLogout">Sign out</button></div>
+    </div>
+    <div id="issueList"></div>
+    <div id="emptyState" class="empty-state" style="display:none;">No issues are logged under your hub(s) right now.</div>
+  </div>
+</div>
+
+<script>
+  const API_BASE = 'https://central-issues-log.onrender.com';
+  let authToken = localStorage.getItem('cbe_token') || null;
+  let authEmail = localStorage.getItem('cbe_email') || null;
+  let authName = localStorage.getItem('cbe_name') || null;
+
+  const $ = (id) => document.getElementById(id);
+  const statusClass = (s) => s === 'Open' ? 'open' : s === 'In Progress' ? 'progress' : s === 'Escalated' ? 'escalated' : 'resolved';
+  const ROLE_LABELS = { ops_manager: 'Ops Manager', regional_manager: 'Regional Manager', cluster_lead: 'Cluster Lead' };
+
+  function escapeHtml(s){
+    return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function fmtTime(iso){
+    if(!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleString('en-GB', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+  }
+
+  async function authedFetch(path, opts={}){
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...opts,
+      headers: {
+        'Content-Type':'application/json',
+        'Authorization': `Bearer ${authToken}`,
+        ...(opts.headers||{})
+      }
+    });
+    if(res.status === 401){ doLogout(); throw new Error('Session expired'); }
+    return res;
+  }
+
+  function doLogout(){
+    authToken = null; authEmail = null; authName = null;
+    localStorage.removeItem('cbe_token'); localStorage.removeItem('cbe_email'); localStorage.removeItem('cbe_name');
+    $('view-console').style.display = 'none';
+    $('view-login').style.display = 'block';
+  }
+
+  $('loginForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const msg = $('loginMsg');
+    msg.textContent = 'Signing in…'; msg.className = 'status-msg';
+    try{
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ email: $('l-email').value.trim(), password: $('l-password').value })
+      });
+      const data = await res.json();
+      if(!res.ok){ msg.textContent = data.error || 'Sign in failed.'; msg.classList.add('err'); return; }
+      authToken = data.token; authEmail = data.email; authName = data.name || null;
+      localStorage.setItem('cbe_token', authToken);
+      localStorage.setItem('cbe_email', authEmail);
+      if(authName) localStorage.setItem('cbe_name', authName);
+      await enterConsole();
+    }catch(err){
+      msg.textContent = 'Could not reach the server.'; msg.classList.add('err');
+    }
+  });
+  $('btnLogout').addEventListener('click', doLogout);
+
+  async function enterConsole(){
+    $('sessionLabel').textContent = authName || authEmail;
+    $('view-login').style.display = 'none';
+    $('view-console').style.display = 'block';
+
+    const meRes = await authedFetch('/api/ops/me');
+    const me = await meRes.json();
+    $('roleBadges').innerHTML = (me.roles||[]).map(r=>`<span class="role-badge">${ROLE_LABELS[r]||r}</span>`).join('')
+      || '<span class="role-badge" style="background:var(--red-soft);color:var(--red);">No hub assigned</span>';
+
+    await loadIssues();
+  }
+
+  async function loadIssues(){
+    const res = await authedFetch('/api/ops/issues');
+    const issues = await res.json();
+    renderIssues(issues);
+  }
+
+  function renderIssues(issues){
+    const list = $('issueList');
+    list.innerHTML = '';
+    $('emptyState').style.display = issues.length ? 'none' : 'block';
+    issues.forEach(i=>{
+      const card = document.createElement('div');
+      card.className = 'issue-card';
+      card.innerHTML = `
+        <div class="issue-top">
+          <div class="issue-id">${escapeHtml(i.consignment)}</div>
+          <div class="issue-meta">${fmtTime(i.ts)} · logged by ${escapeHtml(i.logged_by_name || i.logged_by)}</div>
+        </div>
+        <div class="tag-row">
+          <span class="tag">${escapeHtml(i.channel)}</span>
+          <span class="tag">${escapeHtml(i.zone)}</span>
+          <span class="tag">${escapeHtml(i.hub||'—')}</span>
+          <span class="tag">${escapeHtml(i.category)}</span>
+          <span class="tag">${escapeHtml(i.subcategory)}</span>
+          <span class="badge ${statusClass(i.status)}">${escapeHtml(i.status)}</span>
+        </div>
+        <div class="details-text">${escapeHtml(i.details)}</div>
+        ${i.remarks ? `<div class="prior-remark"><b>Last remark</b> (${escapeHtml(i.remarks_by||'')}, ${fmtTime(i.updated_at)}): ${escapeHtml(i.remarks)}</div>` : ''}
+        <div class="update-row">
+          <div class="field">
+            <label>Remark</label>
+            <textarea placeholder="What's the update on this issue?" data-role="remark"></textarea>
+          </div>
+          <div class="field" style="flex:0 0 auto;">
+            <label>Status</label>
+            <select data-role="status">
+              <option value="Open" ${i.status==='Open'?'selected':''}>Open</option>
+              <option value="In Progress" ${i.status==='In Progress'?'selected':''}>In Progress</option>
+              <option value="Escalated" ${i.status==='Escalated'?'selected':''}>Escalated</option>
+              <option value="Resolved" ${i.status==='Resolved'?'selected':''}>Resolved</option>
+            </select>
+          </div>
+          <button class="primary" data-role="submit">Save update</button>
+        </div>
+        <div style="margin-top:8px;"><span class="status-msg" data-role="msg"></span></div>
+      `;
+      card.querySelector('[data-role=submit]').addEventListener('click', async ()=>{
+        const btn = card.querySelector('[data-role=submit]');
+        const msgEl = card.querySelector('[data-role=msg]');
+        const remark = card.querySelector('[data-role=remark]').value.trim();
+        const status = card.querySelector('[data-role=status]').value;
+        btn.disabled = true; msgEl.textContent = 'Saving…'; msgEl.className = 'status-msg';
+        try{
+          const res = await authedFetch(`/api/ops/issues/${encodeURIComponent(i.id)}`, {
+            method:'PATCH',
+            body: JSON.stringify({ status, remarks: remark || null })
+          });
+          const data = await res.json();
+          if(!res.ok){ msgEl.textContent = data.error || 'Could not save.'; msgEl.classList.add('err'); btn.disabled=false; return; }
+          msgEl.textContent = 'Saved.'; msgEl.classList.add('ok');
+          await loadIssues();
+        }catch(err){
+          msgEl.textContent = 'Could not reach the server.'; msgEl.classList.add('err'); btn.disabled=false;
+        }
+      });
+      list.appendChild(card);
+    });
+  }
+
+  if(authToken){ enterConsole(); } else { $('view-login').style.display = 'block'; }
+</script>
+</body>
+</html>
