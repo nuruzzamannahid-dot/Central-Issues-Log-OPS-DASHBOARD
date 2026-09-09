@@ -79,6 +79,34 @@
   .update-row .field{flex:1;min-width:180px;margin-bottom:0;}
   .update-row select{width:auto;min-width:150px;}
   .empty-state{padding:50px 10px;text-align:center;color:var(--text-faint);font-size:13.5px;}
+
+  .tab-bar{display:flex;gap:22px;margin-bottom:22px;border-bottom:1px solid var(--border);}
+  .tab-btn{background:none;border:none;color:var(--text-faint);font-family:'Inter',sans-serif;font-weight:600;font-size:13.5px;padding:0 0 12px;cursor:pointer;border-bottom:2px solid transparent;}
+  .tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
+  .tab-bar.sub{gap:8px;border-bottom:none;margin-bottom:20px;flex-wrap:wrap;}
+  .tab-bar.sub .tab-btn{font-size:12.5px;padding:7px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;color:var(--text-dim);}
+  .tab-bar.sub .tab-btn.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);}
+
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:24px;}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;}
+  .stat-card .num{font-family:'Fraunces',serif;font-size:25px;font-weight:500;line-height:1.1;}
+  .stat-card .lbl{font-size:10.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin-top:6px;}
+
+  .perf-section-title{font-family:'Fraunces',serif;font-size:17px;font-weight:500;margin:0 0 12px;}
+  .perf-table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:26px;}
+  table.perf-table{width:100%;border-collapse:collapse;}
+  .perf-table th,.perf-table td{padding:11px 16px;text-align:left;font-size:13px;border-bottom:1px solid var(--border);}
+  .perf-table th{color:var(--text-faint);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;background:var(--surface-2);font-weight:600;}
+  .perf-table tbody tr:last-child td{border-bottom:none;}
+  .perf-table td.num-cell{font-family:'IBM Plex Mono',monospace;font-size:12.5px;}
+  .rank-badge{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--surface-2);font-size:11px;font-weight:700;color:var(--text-dim);}
+  .rank-badge.r1{background:var(--gold-soft);color:var(--gold);}
+  .rank-badge.r2{background:#C0C0C022;color:#C6C6C6;}
+  .rank-badge.r3{background:#CD7F3222;color:#CD9A63;}
+  .rate-pill{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;}
+  .rate-pill.hi{background:var(--green-soft);color:var(--green);}
+  .rate-pill.mid{background:var(--gold-soft);color:var(--gold);}
+  .rate-pill.lo{background:var(--red-soft);color:var(--red);}
 </style>
 </head>
 <body>
@@ -111,8 +139,25 @@
       <div class="role-badges" id="roleBadges"></div>
       <div><span id="sessionLabel"></span> &nbsp;·&nbsp; <button class="link" id="btnLogout">Sign out</button></div>
     </div>
-    <div id="issueList"></div>
-    <div id="emptyState" class="empty-state" style="display:none;">No issues are logged under your hub(s) right now.</div>
+
+    <div class="tab-bar" id="mainTabs" style="display:none;">
+      <button class="tab-btn active" data-tab="issues" id="tabBtnIssues">Issues</button>
+      <button class="tab-btn" data-tab="performance" id="tabBtnPerformance" style="display:none;">Performance</button>
+    </div>
+
+    <div id="panel-issues">
+      <div id="issueList"></div>
+      <div id="emptyState" class="empty-state" style="display:none;">No issues are logged under your hub(s) right now.</div>
+    </div>
+
+    <div id="panel-performance" style="display:none;">
+      <div class="tab-bar sub" id="perfSubTabs">
+        <button class="tab-btn active" data-zone="central">Central / CTG</button>
+        <button class="tab-btn" data-zone="isd">ISD &amp; Sub</button>
+        <button class="tab-btn" data-zone="osd">OSD</button>
+      </div>
+      <div id="perfContent"></div>
+    </div>
   </div>
 </div>
 
@@ -125,6 +170,111 @@
   const $ = (id) => document.getElementById(id);
   const statusClass = (s) => s === 'Open' ? 'open' : s === 'In Progress' ? 'progress' : s === 'Escalated' ? 'escalated' : 'resolved';
   const ROLE_LABELS = { ops_manager: 'Ops Manager', regional_manager: 'Regional Manager', cluster_lead: 'Cluster Lead' };
+
+  let myRoles = [];
+  let allIssues = [];
+  let activePerfZone = 'central';
+
+  function classifyZone(zone){
+    const z = (zone||'').toLowerCase();
+    if(z.includes('isd')) return 'isd';
+    if(z.includes('osd')) return 'osd';
+    return 'central';
+  }
+
+  function computeHubStats(issues){
+    const byHub = {};
+    issues.forEach(i=>{
+      const hub = i.hub && i.hub !== '—' ? i.hub : 'Unassigned';
+      if(!byHub[hub]) byHub[hub] = { hub, total:0, remarks:0, solved:0 };
+      byHub[hub].total += 1;
+      if(i.remarks && String(i.remarks).trim()) byHub[hub].remarks += 1;
+      if(i.status === 'Resolved') byHub[hub].solved += 1;
+    });
+    return Object.values(byHub).map(h => ({
+      ...h,
+      rate: h.total ? Math.round((h.solved / h.total) * 100) : 0
+    })).sort((a,b)=> b.total - a.total);
+  }
+
+  function ratePillClass(rate){
+    if(rate >= 70) return 'hi';
+    if(rate >= 40) return 'mid';
+    return 'lo';
+  }
+
+  function renderPerformance(zone){
+    activePerfZone = zone;
+    document.querySelectorAll('#perfSubTabs .tab-btn').forEach(b=>{
+      b.classList.toggle('active', b.dataset.zone === zone);
+    });
+
+    const zoneIssues = allIssues.filter(i => classifyZone(i.zone) === zone);
+    const hubStats = computeHubStats(zoneIssues);
+    const totalIssues = zoneIssues.length;
+    const totalRemarks = hubStats.reduce((s,h)=>s+h.remarks, 0);
+    const totalSolved = hubStats.reduce((s,h)=>s+h.solved, 0);
+    const hubCount = hubStats.length;
+    const avgPerHub = hubCount ? (totalIssues / hubCount).toFixed(1) : '0.0';
+    const overallRate = totalIssues ? Math.round((totalSolved / totalIssues) * 100) : 0;
+
+    const content = $('perfContent');
+    if(!hubCount){
+      content.innerHTML = `<div class="empty-state">No issues logged for this zone yet.</div>`;
+      return;
+    }
+
+    const medalClass = (idx) => idx === 0 ? 'r1' : idx === 1 ? 'r2' : idx === 2 ? 'r3' : '';
+
+    content.innerHTML = `
+      <div class="stat-grid">
+        <div class="stat-card"><div class="num">${totalIssues}</div><div class="lbl">Total issues</div></div>
+        <div class="stat-card"><div class="num">${totalRemarks}</div><div class="lbl">Remarks logged</div></div>
+        <div class="stat-card"><div class="num">${totalSolved}</div><div class="lbl">Solved</div></div>
+        <div class="stat-card"><div class="num">${hubCount}</div><div class="lbl">Hubs reporting</div></div>
+        <div class="stat-card"><div class="num">${avgPerHub}</div><div class="lbl">Avg issues / hub</div></div>
+        <div class="stat-card"><div class="num">${overallRate}%</div><div class="lbl">Overall resolve rate</div></div>
+      </div>
+
+      <div class="perf-section-title">Hub Leaderboard</div>
+      <div class="perf-table-wrap">
+        <table class="perf-table">
+          <thead>
+            <tr>
+              <th>#</th><th>Hub</th><th>Issues</th><th>Remarks</th><th>Solved</th><th>Resolve rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${hubStats.map((h, idx) => `
+              <tr>
+                <td><span class="rank-badge ${medalClass(idx)}">${idx+1}</span></td>
+                <td>${escapeHtml(h.hub)}</td>
+                <td class="num-cell">${h.total}</td>
+                <td class="num-cell">${h.remarks}</td>
+                <td class="num-cell">${h.solved}</td>
+                <td><span class="rate-pill ${ratePillClass(h.rate)}">${h.rate}%</span></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function switchMainTab(tab){
+    const isPerf = tab === 'performance';
+    $('tabBtnIssues').classList.toggle('active', !isPerf);
+    $('tabBtnPerformance').classList.toggle('active', isPerf);
+    $('panel-issues').style.display = isPerf ? 'none' : 'block';
+    $('panel-performance').style.display = isPerf ? 'block' : 'none';
+    if(isPerf) renderPerformance(activePerfZone);
+  }
+
+  $('tabBtnIssues').addEventListener('click', ()=> switchMainTab('issues'));
+  $('tabBtnPerformance').addEventListener('click', ()=> switchMainTab('performance'));
+  document.querySelectorAll('#perfSubTabs .tab-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=> renderPerformance(btn.dataset.zone));
+  });
 
   function escapeHtml(s){
     return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -184,8 +334,14 @@
 
     const meRes = await authedFetch('/api/ops/me');
     const me = await meRes.json();
-    $('roleBadges').innerHTML = (me.roles||[]).map(r=>`<span class="role-badge">${ROLE_LABELS[r]||r}</span>`).join('')
+    myRoles = me.roles || [];
+    $('roleBadges').innerHTML = myRoles.map(r=>`<span class="role-badge">${ROLE_LABELS[r]||r}</span>`).join('')
       || '<span class="role-badge" style="background:var(--red-soft);color:var(--red);">No hub assigned</span>';
+
+    const isOpsManager = myRoles.includes('ops_manager');
+    $('mainTabs').style.display = isOpsManager ? 'flex' : 'none';
+    $('tabBtnPerformance').style.display = isOpsManager ? 'inline-block' : 'none';
+    switchMainTab('issues');
 
     await loadIssues();
   }
@@ -193,7 +349,9 @@
   async function loadIssues(){
     const res = await authedFetch('/api/ops/issues');
     const issues = await res.json();
+    allIssues = issues;
     renderIssues(issues);
+    if($('panel-performance').style.display === 'block') renderPerformance(activePerfZone);
   }
 
   function renderIssues(issues){
