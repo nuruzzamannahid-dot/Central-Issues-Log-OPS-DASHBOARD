@@ -107,6 +107,22 @@
   .rate-pill.hi{background:var(--green-soft);color:var(--green);}
   .rate-pill.mid{background:var(--gold-soft);color:var(--gold);}
   .rate-pill.lo{background:var(--red-soft);color:var(--red);}
+.trend-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:26px;}
+.trend-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;}
+.trend-card .trend-label{font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--accent);margin-bottom:2px;}
+.trend-card .trend-sub{font-size:11px;color:var(--text-faint);margin-bottom:12px;}
+.trend-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-top:1px solid var(--border);font-size:12.5px;}
+.trend-row:first-of-type{border-top:none;}
+.trend-row .trend-metric{color:var(--text-dim);}
+.trend-row .trend-vals{display:flex;align-items:center;gap:8px;}
+.trend-row .trend-cur{font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--text);}
+.delta{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;}
+.delta.up{background:var(--green-soft);color:var(--green);}
+.delta.down{background:var(--red-soft);color:var(--red);}
+.delta.flat{background:var(--surface-2);color:var(--text-faint);}
+.export-row{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+.export-row .hub-select{background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:8px;font-family:'Inter',sans-serif;font-size:12.5px;min-width:180px;}
+.export-row .export-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
 </style>
 </head>
 <body>
@@ -203,6 +219,111 @@
     return 'lo';
   }
 
+  function dateOnly(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function daysBetween(a,b){ return Math.round((dateOnly(a) - dateOnly(b)) / 86400000); }
+  function getWeekStart(d){
+    const dt = dateOnly(d);
+    const day = (dt.getDay() + 6) % 7; // Monday = 0
+    dt.setDate(dt.getDate() - day);
+    return dt;
+  }
+  function statsForIssues(issues){
+    const total = issues.length;
+    const resolved = issues.filter(i => i.status === 'Resolved').length;
+    const rate = total ? Math.round((resolved / total) * 100) : 0;
+    return { total, resolved, rate };
+  }
+  function computeTrendReport(issues){
+    const now = new Date();
+    const today = dateOnly(now);
+    const thisWeekStart = getWeekStart(now);
+    const lastWeekStart = new Date(thisWeekStart); lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+    const thisMonth = now.getMonth(), thisYear = now.getFullYear();
+    let lastMonth = thisMonth - 1, lastMonthYear = thisYear;
+    if(lastMonth < 0){ lastMonth = 11; lastMonthYear -= 1; }
+
+    const withDate = issues.filter(i => i.ts).map(i => ({ ...i, _d: new Date(i.ts) }));
+
+    const dodCurrent = withDate.filter(i => daysBetween(i._d, today) === 0);
+    const dodPrev = withDate.filter(i => daysBetween(i._d, today) === 1);
+
+    const wowCurrent = withDate.filter(i => i._d >= thisWeekStart);
+    const wowPrev = withDate.filter(i => i._d >= lastWeekStart && i._d < thisWeekStart);
+
+    const momCurrent = withDate.filter(i => i._d.getMonth() === thisMonth && i._d.getFullYear() === thisYear);
+    const momPrev = withDate.filter(i => i._d.getMonth() === lastMonth && i._d.getFullYear() === lastMonthYear);
+
+    return {
+      dod: { label: 'DOD', sub: 'Today vs Yesterday', current: statsForIssues(dodCurrent), previous: statsForIssues(dodPrev) },
+      wow: { label: 'WOW', sub: 'This Week vs Last Week', current: statsForIssues(wowCurrent), previous: statsForIssues(wowPrev) },
+      mom: { label: 'MOM', sub: 'This Month vs Last Month', current: statsForIssues(momCurrent), previous: statsForIssues(momPrev) },
+    };
+  }
+  function deltaHtml(cur, prev){
+    const diff = cur - prev;
+    if(diff === 0) return `<span class="delta flat">±0</span>`;
+    const pct = prev ? Math.round((diff / prev) * 100) : (cur > 0 ? 100 : 0);
+    const cls = diff > 0 ? 'up' : 'down';
+    const sign = diff > 0 ? '+' : '';
+    return `<span class="delta ${cls}">${sign}${diff} (${sign}${pct}%)</span>`;
+  }
+  function trendCardHtml(t){
+    return `
+      <div class="trend-card">
+        <div class="trend-label">${t.label}</div>
+        <div class="trend-sub">${t.sub}</div>
+        <div class="trend-row">
+          <span class="trend-metric">Issues logged</span>
+          <span class="trend-vals"><span class="trend-cur">${t.current.total}</span>${deltaHtml(t.current.total, t.previous.total)}</span>
+        </div>
+        <div class="trend-row">
+          <span class="trend-metric">Resolved</span>
+          <span class="trend-vals"><span class="trend-cur">${t.current.resolved}</span>${deltaHtml(t.current.resolved, t.previous.resolved)}</span>
+        </div>
+        <div class="trend-row">
+          <span class="trend-metric">Resolve rate</span>
+          <span class="trend-vals"><span class="trend-cur">${t.current.rate}%</span>${deltaHtml(t.current.rate, t.previous.rate)}</span>
+        </div>
+      </div>
+    `;
+  }
+  function getHubsForZone(zoneIssues){
+    const hubs = new Set(zoneIssues.map(i => (i.hub && i.hub !== '—') ? i.hub : 'Unassigned'));
+    return Array.from(hubs).sort();
+  }
+  function csvEscape(v){
+    const s = (v === null || v === undefined) ? '' : String(v);
+    if(/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+  function exportZoneCsv(zone){
+    const zoneIssues = allIssues.filter(i => classifyZone(i.zone) === zone);
+    const select = $(`hubFilter-${zone}`);
+    const hubFilter = select ? select.value : 'all';
+    const rows = zoneIssues.filter(i => {
+      const hub = (i.hub && i.hub !== '—') ? i.hub : 'Unassigned';
+      return hubFilter === 'all' || hub === hubFilter;
+    });
+    const headers = ['Consignment','Logged At','Hub','Zone','Channel','Category','Subcategory','Status','Logged By','Remarks','Remarks By','Updated At','Details'];
+    const csvRows = [headers.map(csvEscape).join(',')];
+    rows.forEach(i => {
+      const hub = (i.hub && i.hub !== '—') ? i.hub : 'Unassigned';
+      const vals = [i.consignment, i.ts, hub, i.zone, i.channel, i.category, i.subcategory, i.status, (i.logged_by_name || i.logged_by), (i.remarks || ''), (i.remarks_by || ''), (i.updated_at || ''), i.details];
+      csvRows.push(vals.map(csvEscape).join(','));
+    });
+    const csvContent = csvRows.join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const hubLabel = hubFilter === 'all' ? 'all-hubs' : hubFilter.replace(/\s+/g, '-').toLowerCase();
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `issues-${zone}-${hubLabel}-${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   function renderPerformance(zone){
     activePerfZone = zone;
     document.querySelectorAll('#perfSubTabs .tab-btn').forEach(b=>{
@@ -225,6 +346,8 @@
     }
 
     const medalClass = (idx) => idx === 0 ? 'r1' : idx === 1 ? 'r2' : idx === 2 ? 'r3' : '';
+    const trend = computeTrendReport(zoneIssues);
+    const hubs = getHubsForZone(zoneIssues);
 
     content.innerHTML = `
       <div class="stat-grid">
@@ -234,6 +357,24 @@
         <div class="stat-card"><div class="num">${hubCount}</div><div class="lbl">Hubs reporting</div></div>
         <div class="stat-card"><div class="num">${avgPerHub}</div><div class="lbl">Avg issues / hub</div></div>
         <div class="stat-card"><div class="num">${overallRate}%</div><div class="lbl">Overall resolve rate</div></div>
+      </div>
+
+      <div class="perf-section-title">Trend Report (DOD · WOW · MOM)</div>
+      <div class="trend-grid">
+        ${trendCardHtml(trend.dod)}
+        ${trendCardHtml(trend.wow)}
+        ${trendCardHtml(trend.mom)}
+      </div>
+
+      <div class="perf-section-title">Export</div>
+      <div class="export-row">
+        <select class="hub-select" id="hubFilter-${zone}">
+          <option value="all">All hubs</option>
+          ${hubs.map(h => `<option value="${escapeHtml(h)}">${escapeHtml(h)}</option>`).join('')}
+        </select>
+        <div class="export-controls">
+          <button class="ghost" onclick="exportZoneCsv('${zone}')">Export CSV</button>
+        </div>
       </div>
 
       <div class="perf-section-title">Hub Leaderboard</div>
