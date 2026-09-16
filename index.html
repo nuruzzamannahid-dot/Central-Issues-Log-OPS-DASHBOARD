@@ -291,7 +291,7 @@
 
   function classifyZone(zone){
     const z = (zone||'').toLowerCase();
-    if(z.includes('isd')) return 'isd';
+    if(z.includes('isd') || z.includes('sub')) return 'isd';
     if(z.includes('osd')) return 'osd';
     return 'central';
   }
@@ -418,6 +418,15 @@
     btn.addEventListener('click', ()=> renderPerformance(btn.dataset.zone));
   });
 
+  // remarks_by is stored as a raw email (the backend has no name lookup for
+  // it); show the signed-in user's own name when the remark was theirs, since
+  // that's the one case we can resolve client-side without a new endpoint.
+  function remarksByLabel(email){
+    if(!email) return '';
+    if(authName && email === authEmail) return authName;
+    return email;
+  }
+
   function escapeHtml(s){
     return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
@@ -517,7 +526,7 @@
           <span class="badge ${statusClass(i.status)}">${escapeHtml(i.status)}</span>
         </div>
         <div class="details-text">${escapeHtml(i.details)}</div>
-        ${i.remarks ? `<div class="prior-remark"><b>Last remark</b> (${escapeHtml(i.remarks_by||'')}, ${fmtTime(i.updated_at)}): ${escapeHtml(i.remarks)}</div>` : ''}
+        ${i.remarks ? `<div class="prior-remark"><b>Last remark</b> (${escapeHtml(remarksByLabel(i.remarks_by))}, ${fmtTime(i.updated_at)}): ${escapeHtml(i.remarks)}</div>` : ''}
         <div class="update-row">
           <div class="field">
             <label>Remark</label>
