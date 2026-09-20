@@ -279,7 +279,7 @@
 
   const $ = (id) => document.getElementById(id);
   const statusClass = (s) => s === 'Open' ? 'open' : s === 'In Progress' ? 'progress' : s === 'Escalated' ? 'escalated' : 'resolved';
-  const ROLE_LABELS = { ops_manager: 'Ops Manager', regional_manager: 'Regional Manager', cluster_lead: 'Cluster Lead' };
+  const ROLE_LABELS = { hub: 'Hub', ops_manager: 'Ops Manager', regional_manager: 'Regional Manager', cluster_lead: 'Cluster Lead' };
 
   let myRoles = [];
   let allIssues = [];
