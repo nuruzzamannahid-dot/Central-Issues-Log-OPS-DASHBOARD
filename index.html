@@ -89,6 +89,12 @@
   .badge.progress{background:var(--gold-soft);color:var(--gold);}
   .badge.escalated{background:var(--accent-soft);color:var(--accent);}
   .badge.resolved{background:var(--green-soft);color:var(--green);}
+  .flag{font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;display:inline-flex;align-items:center;gap:5px;}
+  .flag.regular{background:var(--surface-2);color:var(--text-faint);}
+  .flag.attention{background:var(--gold-soft);color:var(--gold);}
+  .flag.flag-critical{background:#E0803322;color:#E08033;}
+  .flag.very-critical{background:var(--red);color:#fff;animation:flagPulse 1.6s ease-in-out infinite;}
+  @keyframes flagPulse{0%,100%{opacity:1;}50%{opacity:.6;}}
   .details-text{color:var(--text-dim);font-size:13.5px;line-height:1.5;margin-bottom:14px;}
   .prior-remark{font-size:12.5px;color:var(--text-faint);border-top:1px solid var(--border);padding-top:10px;margin-top:2px;margin-bottom:14px;}
   .prior-remark b{color:var(--text-dim);}
@@ -279,6 +285,13 @@
 
   const $ = (id) => document.getElementById(id);
   const statusClass = (s) => s === 'Open' ? 'open' : s === 'In Progress' ? 'progress' : s === 'Escalated' ? 'escalated' : 'resolved';
+  const FLAG_CLASS = { 'Regular': 'regular', 'Need attention': 'attention', 'Critical': 'flag-critical', 'Very critical': 'very-critical', 'Resolved': null };
+  const FLAG_ICON = { 'Regular': '', 'Need attention': '🚩', 'Critical': '🚩', 'Very critical': '🚩' };
+  function renderFlag(i){
+    const cls = FLAG_CLASS[i.response_status];
+    if(!cls) return '';
+    return `<span class="flag ${cls}">${FLAG_ICON[i.response_status]||''} ${escapeHtml(i.response_status)} · ${escapeHtml(i.escalation_level||'')}</span>`;
+  }
   const ROLE_LABELS = { hub: 'Hub', ops_manager: 'Ops Manager', regional_manager: 'Regional Manager', cluster_lead: 'Cluster Lead' };
 
   let myRoles = [];
@@ -624,6 +637,7 @@
           <span class="tag">${escapeHtml(i.category)}</span>
           <span class="tag">${escapeHtml(i.subcategory)}</span>
           <span class="badge ${statusClass(i.status)}">${escapeHtml(i.status)}</span>
+          ${renderFlag(i)}
         </div>
         <div class="details-text">${escapeHtml(i.details)}</div>
         ${i.remarks ? `<div class="prior-remark"><b>Last remark</b> (${escapeHtml(remarksByLabel(i.remarks_by))}, ${fmtTime(i.updated_at)}): ${escapeHtml(i.remarks)}</div>` : ''}
