@@ -239,12 +239,18 @@
 
     <div class="tab-bar" id="mainTabs" style="display:none;">
       <button class="tab-btn active" data-tab="issues" id="tabBtnIssues">Issues</button>
+      <button class="tab-btn" data-tab="flagged" id="tabBtnFlagged" style="display:none;">Flagged</button>
       <button class="tab-btn" data-tab="performance" id="tabBtnPerformance" style="display:none;">Performance</button>
     </div>
 
     <div id="panel-issues">
       <div id="issueList"></div>
       <div id="emptyState" class="empty-state" style="display:none;">No issues are logged under your hub(s) right now.</div>
+    </div>
+
+    <div id="panel-flagged" style="display:none;">
+      <div id="flaggedList"></div>
+      <div id="flaggedEmptyState" class="empty-state" style="display:none;">Nothing flagged right now — everything under you is on time.</div>
     </div>
 
     <div id="panel-performance" style="display:none;">
@@ -517,15 +523,18 @@
   }
 
   function switchMainTab(tab){
-    const isPerf = tab === 'performance';
-    $('tabBtnIssues').classList.toggle('active', !isPerf);
-    $('tabBtnPerformance').classList.toggle('active', isPerf);
-    $('panel-issues').style.display = isPerf ? 'none' : 'block';
-    $('panel-performance').style.display = isPerf ? 'block' : 'none';
-    if(isPerf) renderPerformance(activePerfZone);
+    $('tabBtnIssues').classList.toggle('active', tab === 'issues');
+    $('tabBtnFlagged').classList.toggle('active', tab === 'flagged');
+    $('tabBtnPerformance').classList.toggle('active', tab === 'performance');
+    $('panel-issues').style.display = tab === 'issues' ? 'block' : 'none';
+    $('panel-flagged').style.display = tab === 'flagged' ? 'block' : 'none';
+    $('panel-performance').style.display = tab === 'performance' ? 'block' : 'none';
+    if(tab === 'flagged') renderFlagged();
+    if(tab === 'performance') renderPerformance(activePerfZone);
   }
 
   $('tabBtnIssues').addEventListener('click', ()=> switchMainTab('issues'));
+  $('tabBtnFlagged').addEventListener('click', ()=> switchMainTab('flagged'));
   $('tabBtnPerformance').addEventListener('click', ()=> switchMainTab('performance'));
   document.querySelectorAll('#perfSubTabs .tab-btn').forEach(btn=>{
     btn.addEventListener('click', ()=> renderPerformance(btn.dataset.zone));
@@ -603,7 +612,9 @@
       || '<span class="role-badge" style="background:var(--red-soft);color:var(--red);">No hub assigned</span>';
 
     const isOpsManager = myRoles.includes('ops_manager');
-    $('mainTabs').style.display = isOpsManager ? 'flex' : 'none';
+    const canSeeFlagged = myRoles.some(r => ['cluster_lead', 'regional_manager', 'ops_manager'].includes(r));
+    $('mainTabs').style.display = (isOpsManager || canSeeFlagged) ? 'flex' : 'none';
+    $('tabBtnFlagged').style.display = canSeeFlagged ? 'inline-block' : 'none';
     $('tabBtnPerformance').style.display = isOpsManager ? 'inline-block' : 'none';
     switchMainTab('issues');
 
@@ -614,14 +625,29 @@
     const res = await authedFetch('/api/ops/issues');
     const issues = await res.json();
     allIssues = issues;
-    renderIssues(issues);
+    renderIssues(issues, 'issueList', 'emptyState');
+    if($('panel-flagged').style.display === 'block') renderFlagged();
     if($('panel-performance').style.display === 'block') renderPerformance(activePerfZone);
   }
 
-  function renderIssues(issues){
-    const list = $('issueList');
+  // Higher severity first (Very critical > Critical > Need attention), and
+  // within the same severity, whichever has been stuck longest goes first.
+  const SEVERITY_RANK = { 'Very critical': 3, 'Critical': 2, 'Need attention': 1 };
+  function renderFlagged(){
+    const flagged = allIssues
+      .filter(i => SEVERITY_RANK[i.response_status])
+      .sort((a, b) => {
+        const rankDiff = SEVERITY_RANK[b.response_status] - SEVERITY_RANK[a.response_status];
+        if(rankDiff) return rankDiff;
+        return new Date(a.level_started_at || a.ts) - new Date(b.level_started_at || b.ts);
+      });
+    renderIssues(flagged, 'flaggedList', 'flaggedEmptyState');
+  }
+
+  function renderIssues(issues, listId, emptyId){
+    const list = $(listId);
     list.innerHTML = '';
-    $('emptyState').style.display = issues.length ? 'none' : 'block';
+    $(emptyId).style.display = issues.length ? 'none' : 'block';
     issues.forEach(i=>{
       const card = document.createElement('div');
       card.className = 'issue-card';
